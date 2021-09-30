@@ -1,0 +1,184 @@
+---
+title: "Machine Learning Course Project"
+author: "Christian Thyssen"
+date: "2021-09-30"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+In this project, our goal is to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants to achieve this goal.
+They were asked to perform barbell lifts correctly and incorrectly in 5 different ways:
+
+* exactly according to the specification (Class A),
+* throwing the elbows to the front (Class B),
+* lifting the dumbbell only halfway (Class C),
+* lowering the dumbbell only halfway (Class D), and
+* throwing the hips to the front (Class E).
+
+We download the data, clean the data, choose a model and estimate the expected out of sample error, train the chosen model, and apply the model to a testing data set.
+
+# Getting the Data
+
+We load the libraries we want to use.
+
+```{r}
+library(tidyverse)
+library(caret)
+```
+
+We download the CSV files using the provided URLs.
+
+```{r}
+training.url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testing.url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+if(!file.exists("training.csv")) download.file(training.url, "training.csv")
+if(!file.exists("testing.csv")) download.file(testing.url, "testing.csv")
+```
+
+We read the training and the testing data set.
+
+```{r}
+training <- read_csv("training.csv", na = c("", "NA", "#DIV/0!"))
+testing <- read_csv("testing.csv", na = c("", "NA", "#DIV/0!"))
+```
+
+# Cleaning the Data
+
+First, we improve the column names.
+We name the first, unnamed column "index".
+We correct some typos ("picth" to "pitch", "classe" to "class").
+We correct some inconsistent names ("skewness_roll_belt.1" to "skewness_pitch_belt", "var_accel" to "var_total_accel").
+
+```{r}
+improve.names <- function(names) {
+    names <- str_replace(names, "...1", "index")
+    names <- str_replace(names, "picth", "pitch")
+    names <- str_replace(names, "skewness_roll_belt.1", "skewness_pitch_belt")
+    names <- str_replace(names, "var_accel", "var_total_accel")
+}
+
+names(training) <- improve.names(names(training))
+names(training) <- str_replace(names(training), "classe", "class")
+
+names(testing) <- improve.names(names(testing))
+```
+
+We transform the column "class" in the training data set into a factor variable.
+
+```{r}
+training <- training %>% mutate(class = factor(class))
+```
+
+We decided to base our prediction model on the raw measurements.
+Hence, we remove all unneeded columns.
+We remove the column "index", since it simply numbers the observations from 1 to n.
+We remove the column "user_name", since we do not want to use it as a predictor.
+We remove the columns containing "timestamp", since we assume that time has no influence on the measurements.
+
+We remove the columns containing "window", since we decided not to use the aggregated features of multiple consecutive measurements.
+We remove all columns containing these aggregated features:
+There are 96 features resulting from every combination of the Euler angles (yaw, pitch, roll), the sensors (belt, arm, dumbbell, forearm), and the aggregation methods (mean, variance, standard deviation, max, min, amplitude, kurtosis, skewness).
+There are 4 additional features for the variance of the total acceleration of each sensor (belt, arm, dumbbell, forearm).
+For the testing set we also remove the column "problem_id".
+
+```{r}
+remove.columns <- function(data.frame) {
+    data.frame %>%
+        select(!matches("index")) %>%         # removes  1 column
+        select(!matches("user_name")) %>%     # removes  1 column
+        select(!contains("timestamp")) %>%    # removes  3 columns
+        select(!contains("window")) %>%       # removes  2 columns
+        select(!starts_with("avg")) %>%       # removes 12 columns
+        select(!starts_with("var")) %>%       # removes 16 columns
+        select(!starts_with("stddev")) %>%    # removes 12 columns
+        select(!starts_with("max")) %>%       # removes 12 columns
+        select(!starts_with("min")) %>%       # removes 12 columns
+        select(!starts_with("amplitude")) %>% # removes 12 columns
+        select(!starts_with("kurtosis")) %>%  # removes 12 columns
+        select(!starts_with("skewness"))      # removes 12 columns
+}
+
+training <- remove.columns(training)
+
+testing <- remove.columns(testing)
+testing <- testing %>%
+    select(!matches("problem_id"))            # removes  1 column
+```
+
+# Choosing, Training, and Tuning a Model
+
+We decided to use the model Stochastic Gradient Boosting.
+To check if the model performs well, we use 10-fold cross validation.
+
+```{r}
+trControl <- trainControl(method = "cv", number = 10)
+set.seed(1)
+fit.1 <- train(class ~ ., training, method = "gbm", verbose = FALSE, trControl = trControl)
+print(fit.1)
+```
+
+Hence, the expected out of sample error of the best model is `r max(fit.1$results["Accuracy"])`.
+
+The following plot shows the cross-validation accuracy as a function of the number of trees for the different interaction depths.
+
+```{r}
+ggplot(fit.1)
+```
+
+Both, a higher number of trees and a higher interaction depth increase the cross-validation accuracy.
+Hence, we check if increasing these parameters further is beneficial.
+
+```{r}
+trControl <- trainControl(method = "cv", number = 10)
+tuneGrid <- expand.grid(n.trees = c(150, 200, 250),
+                        interaction.depth = c(3, 4, 5),
+                        shrinkage = c(.1),
+                        n.minobsinnode = c(10))
+set.seed(1)
+fit.2 <- train(class ~ ., training, method = "gbm", verbose = FALSE, trControl = trControl, tuneGrid = tuneGrid)
+print(fit.2)
+```
+
+Now, the expected out of sample error of the best model is `r max(fit.2$results["Accuracy"])`.
+
+We have another look at the cross-validation accuracy as a function of the number of trees for the different interaction depths.
+
+```{r}
+ggplot(fit.2)
+```
+
+Even though there seems to be room for further improvement, we content with the best tuning parameters found so far.
+
+# Training the Final Model
+
+We train the final model on the whole training data set using the best tuning parameters from the last training.
+
+```{r}
+set.seed(1)
+fit.3 <- train(class ~ ., training, method = "gbm", tuneGrid = fit.2$bestTune, verbose = FALSE)
+```
+
+We have a look at the confusion matrix.
+
+```{r}
+cm <- confusionMatrix(predict(fit.3, training), training$class)
+cm
+```
+
+The overall accuracy is `r cm$overall["Accuracy"]`.
+
+# Testing the Final Model
+
+We use the final model to predict the classes of the observations in the testing data set.
+
+```{r}
+predict(fit.3, testing)
+```
