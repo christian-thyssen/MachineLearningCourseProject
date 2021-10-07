@@ -261,7 +261,7 @@ print(fit.1)
 ##  3, shrinkage = 0.1 and n.minobsinnode = 10.
 ```
 
-Hence, the expected out of sample error of the best model is 0.962337.
+Hence, the expected out of sample error of the best model is 0.037663.
 
 The following plot shows the cross-validation accuracy as a function of the number of trees for the different interaction depths.
 
@@ -318,7 +318,7 @@ print(fit.2)
 ##  5, shrinkage = 0.1 and n.minobsinnode = 10.
 ```
 
-Now, the expected out of sample error of the best model is 0.9917946.
+Now, the expected out of sample error of the best model is 0.0082054.
 
 We have another look at the cross-validation accuracy as a function of the number of trees for the different interaction depths.
 

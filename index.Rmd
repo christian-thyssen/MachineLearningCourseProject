@@ -125,7 +125,7 @@ fit.1 <- train(class ~ ., training, method = "gbm", verbose = FALSE, trControl =
 print(fit.1)
 ```
 
-Hence, the expected out of sample error of the best model is `r max(fit.1$results["Accuracy"])`.
+Hence, the expected out of sample error of the best model is `r 1 - max(fit.1$results["Accuracy"])`.
 
 The following plot shows the cross-validation accuracy as a function of the number of trees for the different interaction depths.
 
@@ -147,7 +147,7 @@ fit.2 <- train(class ~ ., training, method = "gbm", verbose = FALSE, trControl =
 print(fit.2)
 ```
 
-Now, the expected out of sample error of the best model is `r max(fit.2$results["Accuracy"])`.
+Now, the expected out of sample error of the best model is `r 1 - max(fit.2$results["Accuracy"])`.
 
 We have another look at the cross-validation accuracy as a function of the number of trees for the different interaction depths.
 
